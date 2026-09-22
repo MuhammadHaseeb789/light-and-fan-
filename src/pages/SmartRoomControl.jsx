@@ -2,8 +2,14 @@ import React, { useState, useEffect } from 'react';
 import { Sun, Moon, Wind, Power, Zap } from 'lucide-react';
 import mqtt from 'mqtt';
 
-// Free HiveMQ WebSocket broker URL
 const MQTT_BROKER = 'wss://broker.hivemq.com:8884/mqtt';
+
+// Unique topics for publishing and listening
+const TOPIC_LIGHT_STATUS = 'myhome/esp32/light/status';
+const TOPIC_LIGHT_SET = 'myhome/esp32/light/set';
+
+const TOPIC_FAN_STATUS = 'myhome/esp32/fan/status';
+const TOPIC_FAN_SET = 'myhome/esp32/fan/set';
 
 export default function SmartRoomControl() {
   const [isLightOn, setIsLightOn] = useState(false);
@@ -12,16 +18,29 @@ export default function SmartRoomControl() {
   const [isConnected, setIsConnected] = useState(false);
 
   useEffect(() => {
-    // Connect to MQTT broker via WebSockets (works securely on Vercel HTTPS!)
     const mqttClient = mqtt.connect(MQTT_BROKER);
 
     mqttClient.on('connect', () => {
       setIsConnected(true);
       console.log('Connected to MQTT Broker');
+      
+      // Subscribe to status topics to receive updates from ESP32 or other devices
+      mqttClient.subscribe(TOPIC_LIGHT_STATUS);
+      mqttClient.subscribe(TOPIC_FAN_STATUS);
+    });
+
+    mqttClient.on('message', (topic, message) => {
+      const payload = message.toString();
+      
+      if (topic === TOPIC_LIGHT_STATUS) {
+        setIsLightOn(payload === 'on');
+      } else if (topic === TOPIC_FAN_STATUS) {
+        setIsFanOn(payload === 'on');
+      }
     });
 
     mqttClient.on('error', (err) => {
-      console.error('MQTT connection error: ', err);
+      console.error('MQTT error:', err);
       setIsConnected(false);
     });
 
@@ -34,17 +53,19 @@ export default function SmartRoomControl() {
 
   const handleLightToggle = () => {
     const newState = !isLightOn;
+    // Optimistic update locally
     setIsLightOn(newState);
     if (client && isConnected) {
-      client.publish('myhome/esp32/light', newState ? 'on' : 'off');
+      client.publish(TOPIC_LIGHT_SET, newState ? 'on' : 'off');
     }
   };
 
   const handleFanToggle = () => {
     const newState = !isFanOn;
+    // Optimistic update locally
     setIsFanOn(newState);
     if (client && isConnected) {
-      client.publish('myhome/esp32/fan', newState ? 'on' : 'off');
+      client.publish(TOPIC_FAN_SET, newState ? 'on' : 'off');
     }
   };
 
@@ -57,13 +78,13 @@ export default function SmartRoomControl() {
           <div>
             <h1 className="text-2xl font-bold tracking-tight text-white flex items-center gap-2">
               <Zap className="w-6 h-6 text-indigo-400" />
-              Remote IoT Dashboard
+              Real-time Dashboard
             </h1>
-            <p className="text-sm text-slate-400 mt-0.5">Controlled via Cloud MQTT</p>
+            <p className="text-sm text-slate-400 mt-0.5">Multi-device Synced</p>
           </div>
           <div className={`flex items-center gap-2 px-3 py-1.5 rounded-full bg-slate-800/80 border border-slate-700/50 text-xs font-medium ${isConnected ? 'text-emerald-400' : 'text-amber-400'}`}>
             <span className={`w-2 h-2 rounded-full ${isConnected ? 'bg-emerald-400 animate-pulse' : 'bg-amber-400'}`} />
-            {isConnected ? 'Cloud Online' : 'Connecting...'}
+            {isConnected ? 'Synced' : 'Connecting...'}
           </div>
         </div>
 
